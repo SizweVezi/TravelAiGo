@@ -61,6 +61,7 @@ john = create_traveller(
     }
 )
 
+
 #Flight offers search
 def flight_offers(originlocationcode, destinationlocationcode, adults, departuredate, returndate):
     logger.info(f"Searching flight offers: {originlocationcode} to {destinationlocationcode}, {adults} adults, departure: {departuredate}, return: {returndate}")
