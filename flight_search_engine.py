@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv, find_dotenv
 from amadeus import ResponseError, Client
+import logging
 
 _ = load_dotenv(find_dotenv()) # read local .env file
 #Amadeus
@@ -10,7 +11,9 @@ amadeus = Client(
     )
 
 # Creates a traveller profile with personal and contact information, returns the information in a dictionary
+
 def create_traveller(traveller_id, first_name, last_name, dob, gender, email,phone_number, country_code, document_info=None):
+
     traveller = {
         'id': traveller_id,
         'dateOfBirth': dob,
@@ -31,7 +34,7 @@ def create_traveller(traveller_id, first_name, last_name, dob, gender, email,pho
     }
     if document_info:
         traveller['documents'].append(document_info)
-        return traveller
+    return traveller
 
  # USAGE:: Creating a traveller
 john = create_traveller(
@@ -62,22 +65,21 @@ john = create_traveller(
 def flight_offers(originlocationcode, destinationlocationcode, adults, departuredate, returndate):
     logger.info(f"Searching flight offers: {originlocationcode} to {destinationlocationcode}, {adults} adults, departure: {departuredate}, return: {returndate}")
     try:
-          response = amadeus.shopping.flight_offers_search.get(
+        response = amadeus.shopping.flight_offers_search.get(
             originLocationCode=originlocationcode,
             destinationLocationCode=destinationlocationcode,
             adults=adults,
             departureDate=departuredate,
             returnDate=returndate
         )
-        logger.info(f"Successfully retrieved {len(response.data)} flight offers")
-        return True, response.data
-    except ResponseError as error:
-        logger.error(f"Error in flight_offers search: {str(error)}")
-        return False, str(error)
 
+        return response.data
+    except ResponseError as error:
+        logger.error(f"Amadeus API error: {str(api_error)}")
+        raise error
 
 try:
-    # USAGE:: Flight Offers Search to find the cheapest flights
+    #USAGE:: Flight Offers Search to find the cheapest flights
     flight_search = flight_offers(
         'SYD',
         'BKK',
@@ -87,11 +89,11 @@ try:
 
     #Flight Offers Price to confirm the price of the chosen flight
     price_confirmation = amadeus.shopping.flight_offers.pricing.post(
-       flight_search[0]).data
+        flight_search[0]).data
 
     #Flight create orders to book the flight
     flight_order = amadeus.booking.flight_orders.post(
-       flight_search[0], john).data
+        flight_search[0], john).data
 
 except ResponseError as api_error:
     logger.error(f"Amadeus API error: {str(api_error)}")
