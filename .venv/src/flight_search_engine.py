@@ -62,8 +62,6 @@ def get_flight_offers(originlocation, destinationlocation, no_of_adults, departd
     except Exception as e:
         return json.dumps({"error": str(e)})
 
-
-
 #Function to define traveller details, returns them as a dict
 def create_traveller(traveller_id, first_name, last_name, dob, gender, email,phone_number, country_code, document_info=None):
     traveller = {

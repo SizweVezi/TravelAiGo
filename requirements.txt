@@ -1,3 +1,0 @@
-amadeus==9.0.0
-pytest==7.4.4
-pytest-mock==3.12.0
