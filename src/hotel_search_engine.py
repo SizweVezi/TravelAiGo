@@ -1,12 +1,64 @@
 import json
 import os
-from datetime import date, timedelta
+from datetime import datetime, date, timedelta
 from amadeus import Client, ResponseError
 
 amadeus = Client(
     client_id=os.environ.get("CLIENT_ID"),
     client_secret=os.environ.get("CLIENT_SECRET")
 )
+
+def lambda_handler(event, context):
+    try:
+        # Validate input parameters
+        if not isinstance(event, dict):
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'Invalid event format'})
+            }
+
+        location = event.get('location')
+        check_in_date = event.get('check_in_date')
+        check_out_date = event.get('check_out_date')
+
+        # Validate required parameters
+        if not location:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'Location is required'})
+            }
+
+        # Convert string dates to date objects if provided
+        if check_in_date:
+            try:
+                check_in_date = datetime.strptime(check_in_date, '%Y-%m-%d').date()
+            except ValueError:
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({'error': 'Invalid check_in_date format. Use YYYY-MM-DD'})
+                }
+        else:
+            check_in_date = date.today()
+
+        if check_out_date:
+            try:
+                check_out_date = datetime.strptime(check_out_date, '%Y-%m-%d').date()
+            except ValueError:
+                return {
+                    'statusCode': 400,
+                    'body': json.dumps({'error': 'Invalid check_out_date format. Use YYYY-MM-DD'})
+                }
+        else:
+            check_out_date = check_in_date + timedelta(days=3)
+
+        # Get hotel offers
+        hotel_results = get_hotel_offers(location, check_in_date, check_out_date)
+
+        # Return direct response
+        return hotel_results
+    except Exception as e:
+        return json.dumps({'error': str(e)})
+
 
 #City code function to retrieve city names by using city codes.
 def city_code_search(city_name):

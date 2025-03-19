@@ -1,54 +1,72 @@
 import json
 import os
-from dotenv import find_dotenv, load_dotenv
+import boto3
+from botocore.exceptions import ClientError
 from amadeus import Client, ResponseError
+from datetime import datetime, date, timedelta
+#from dotenv import load_dotenv, find_dotenv
 
-#Load .env file
-_= load_dotenv(find_dotenv())
 
-#Initilize amadeus client
-amadeus = Client(
-   client_id = os.environ.get("CLIENT_ID"),
-    client_secret = os.environ.get("CLIENT_SECRET")
-)
+# Function to retrieve Amadeus API keys from AWS Secrets Manager
+def get_amadeus_api_keys():
+        secret_name = "amadeus_secret"
+        region_name = "us-east-1"
 
+        #Launcing the AWS session
+        session = boto3.session.Session()
+        client = session.client(service_name="secretsmanager", region_name=region_name)
+
+        try:
+            response = client.get_secret_value(SecretId=secret_name)
+            secret = json.loads(response["SecretString"])
+            return secret["CLIENT_ID"], secret["CLIENT_SECRET"]
+        except Exception as e:
+            print(f"Error retrieving secret: {e}")
+            return None, None
+
+#Initializing the Amadeus API
+CLIENT_ID, CLIENT_SECRET = get_amadeus_api_keys()
+amadeus = Client(client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
+if not CLIENT_ID or not CLIENT_SECRET:
+    raise ValueError("API key and secret not found")
 
 #Function to retrieve city names using city code
 def city_code_search(city_code):
-    try:
-        response = amadeus.reference_data.locations.get(keyword = city_code, subType = 'CITY')
-        return response.data[0]['address']['cityCode']
+        try:
+            response = amadeus.reference_data.locations.get(keyword = city_code, subType = 'CITY')
 
-    except ResponseError as City_Code_Error:
-        raise City_Code_Error
+            if not response.data:
+                return f"No city found for '{city_code}'"
 
+            return response.data[0]['iataCode']
 
+        except ResponseError as City_Code_Error:
+            raise City_Code_Error
 
-#Flight Offers Search
-def flight_offers (originlocationcode, destinationlocationcode, adults, departuredate, returndate):
+# #Flight Offers Search
+def flight_offers(originlocationcode, destinationlocationcode, adults, departuredate, returndate):
     if not all((originlocationcode, destinationlocationcode, adults, departuredate, returndate)):
         print("All fields must be completed")
-        return []
+        return None
     try:
-            response = amadeus.shopping.flight_offers_search.get(
-                originLocationCode = originlocationcode,
-                destinationLocationCode = destinationlocationcode,
-                adults = adults,
-                departureDate = departuredate,
-                returnDate = returndate
-            )
-            return response.data
+        response = amadeus.shopping.flight_offers_search.get(
+            originLocationCode=originlocationcode,
+            destinationLocationCode=destinationlocationcode,
+            adults=adults,
+            departureDate=departuredate,
+            returnDate=returndate
+        )
+        return response.data
     except ResponseError as Flight_Offers_Error:
         print(f"An error occurred: {Flight_Offers_Error}")
-        return []
-
-
-#Get Flight Offers wrapper
+        return None
+#
+# #Get Flight Offers wrapper
 def get_flight_offers(originlocation, destinationlocation, no_of_adults, departdate, returndate):
     try:
         origin_city_code = city_code_search(originlocation)
         if not origin_city_code:
-            return json.dumps({"error": "City Code not found"})
+            return json.dumps({"error": "Origin city code not found"})
 
         destination_city_code = city_code_search(destinationlocation)
         if not destination_city_code:
@@ -59,75 +77,30 @@ def get_flight_offers(originlocation, destinationlocation, no_of_adults, departd
             return json.dumps({"error": "No flight offers found"})
 
         return json.dumps(flights_on_offer)
-    except Exception as e:
+    except ResponseError as e:
         return json.dumps({"error": str(e)})
+#
 
-#Function to define traveller details, returns them as a dict
-def create_traveller(traveller_id, first_name, last_name, dob, gender, email,phone_number, country_code, document_info=None):
-    traveller = {
-        'id': traveller_id,
-        'dateOfBirth': dob,
-        'name': {
-            'firstName': first_name,
-            'lastName': last_name
-        },
-        'gender': gender,
-        'contact': {
-            'emailAddress': email,
-            'phones': [{
-                'deviceType': 'MOBILE',
-                'countryCallingCode': country_code,
-                'number': phone_number
-            }]
-        },
-        'documents': []
-    }
-    if document_info:
-        traveller['documents'].append(document_info)
-    return traveller
+def lambda_handler(event, context):
+    try:
+        # Extract parameters from event
+        origin = event.get('originlocation')
+        destination = event.get('destinationlocation')
+        adults = event.get('no_of_adults')
+        depart_date = event.get('departdate')
+        return_date = event.get('returndate')
 
-try:
-    # Create a traveller
-    sizwe = create_traveller(
-        traveller_id=1,
-        first_name="Sizwe",
-        last_name="Vezi",
-        dob="1970-01-01",
-        gender="M",
-        email="johndoe@example.com",
-        phone_number="16505360797",
-        country_code="1",
-        document_info={
-            'documentType': 'PASSPORT',
-            'birthPlace': 'London',
-            'issuanceLocation': 'London',
-            'issuanceDate': '2015-03-06',
-            'number': '00000000',
-            'expiryDate': '2025-03-06',
-            'issuanceCountry': 'GB',
-            'validityCountry': 'GB',
-            'nationality': 'GB',
-            'holder': True
-        }
-    )
+        # Get flight offers
+        flight_results = get_flight_offers(
+            origin, destination, adults, depart_date, return_date
+        )
 
-    #flight search based on criteria
-    flight_search = get_flight_offers(
-        'LON',
-        'SYD',
-        1,
-        '2025-06-23',
-        '2025-07-26'
-    )
+        # Return direct response
+        return flight_results
+    except Exception as e:
+        return e
 
 
-    #price confirmation from price search
-    price_confirmation = amadeus.shopping.flight_offers.pricing.post(
-        flight_search[0]).data
 
-    #Booking of actual flight
-    flight_order = amadeus.booking.flight_orders.post(
-        flight_search[0],sizwe).data
 
-except ResponseError as api_error:
-    raise api_error
+
