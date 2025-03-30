@@ -106,49 +106,96 @@ resource "aws_iam_role_policy_attachment" "secrets_policy_attachment" {
   role       = aws_iam_role.zuluchain_lambda_role.name
 }
 
-# Code archive for the Hotel search Lambda function
-# data "archive_file" "zip_hotel_search_engine" {
-#     type        = "zip"
-#     source_dir  = "${path.module}/package_hotel"
-#     output_path = "${path.module}/hotel_search_engine.zip"
-#     excludes    = ["__pycache__", "*.pyc"]
-#     depends_on  = [null_resource.hotel_install_dependencies]
-# }
 
-# resource "null_resource" "hotel_install_dependencies" {
-#   triggers = {
-#     dependencies_versions = filemd5("${path.module}/../src/requirements.txt")
-#     source_versions = filemd5("${path.module}/../src/hotel_search_engine.py")
-#   }
-#
-#    provisioner "local-exec" {
-#         command = "bash ${path.module}/package.sh"
-#    }
-#}
+#Hotel configuration
 
+# ====================================
+
+#Zip the hotel search engine code
+data "archive_file" "zip_hotel_search_engine" {
+    type        = "zip"
+    source_dir  = "${path.module}/package_hotel"
+    output_path = "${path.module}/hotel_search_engine.zip"
+    # excludes    = ["__pycache__", "*.pyc"]
+    depends_on  = [null_resource.hotel_install_dependencies]
+}
+
+resource "null_resource" "hotel_install_dependencies" {
+  triggers = {
+    dependencies_versions = filemd5("${path.module}/../src/requirements.txt")
+    source_versions = filemd5("${path.module}/../src/hotel_search_engine.py")
+  }
+
+   provisioner "local-exec" {
+        command = "bash ${path.module}/package.sh"
+   }
+}
+
+#Zip the hotel booking code
+data "archive_file" "zip_hotel_booking"{
+  type = "zip"
+  source_dir = "${path.module}/package_hotel_booking"
+  output_path = "${path.module}/hotel_booking.zip"
+  depends_on = [null_resource.hotel_booking_install_dependencies]
+}
+
+resource "null_resource" "hotel_booking_install_dependencies" {
+  triggers = {
+    dependencies_versions = filemd5("${path.module}/../src/requirements.txt")
+    source_versions = filemd5("${path.module}/../src/hotel_booking.py")
+  }
+
+  provisioner "local-exec" {
+    command = "bash ${path.module}/package.sh"
+  }
+}
 
 # hotel search engine Lambda function
-# resource "aws_lambda_function" "terraform_lambda_func" {
-#     filename         = data.archive_file.zip_hotel_search_engine.output_path
-#     source_code_hash = data.archive_file.zip_hotel_search_engine.output_base64sha256
-#     function_name    = "hotel_search_engine_function"
-#     role            = aws_iam_role.zuluchain_lambda_role.arn
-#     handler         = "hotel_search_engine.lambda_handler"
-#     runtime         = "python3.9"
-#     timeout         = 30
-#     memory_size     = 256
-#     environment {
-#         variables = {
-#             CLIENT_ID     = "jdGnQ3CHefvnvx9eGWOuR7ECfrZsFQot"
-#             CLIENT_SECRET = "ix412GA6CCjlwGzA"
-#         }
-#     }
-#     depends_on      = [aws_iam_policy_attachment.zuluchain_lambda_policy_attachment]
-# }
+resource "aws_lambda_function" "terraform_lambda_func" {
+    filename         = data.archive_file.zip_hotel_search_engine.output_path
+    source_code_hash = data.archive_file.zip_hotel_search_engine.output_base64sha256
+    function_name    = "hotel_search_engine_function"
+    role            = aws_iam_role.zuluchain_lambda_role.arn
+    handler         = "hotel_search_engine.lambda_handler"
+    runtime         = "python3.9"
+    timeout         = 30
+    memory_size     = 256
+    depends_on      = [aws_iam_role_policy_attachment.zuluchain_lambda_policy_attachment]
+}
+
+# hotel booking Lambda function
+resource "aws_lambda_function" "terraform_lambda_func_booking" {
+  filename = data.archive_file.zip_hotel_booking.output_path
+  source_code_hash = data.archive_file.zip_hotel_booking.output_base64sha256
+  function_name = "hotel_booking_function"
+  role          = aws_iam_role.zuluchain_lambda_role.arn
+  handler = "hotel_booking.lambda_handler"
+  runtime = "python3.9"
+  timeout = 30
+  memory_size = 256
+  depends_on = [aws_iam_role_policy_attachment.zuluchain_lambda_policy_attachment]
+}
 
 #=======================================================================================================================
 
+
+
 #Flight configuration
+
+# ====================================
+
+# Flight search engine Lambda function
+resource "aws_lambda_function" "terraform_lambda_func_flight" {
+    filename         = data.archive_file.zip_flight_search_engine.output_path
+    source_code_hash = data.archive_file.zip_flight_search_engine.output_base64sha256
+    function_name    = "flight_search_engine_function"
+    role            = aws_iam_role.zuluchain_lambda_role.arn
+    handler         = "flight_search_engine.lambda_handler"
+    runtime         = "python3.9"
+    timeout         = 30
+    memory_size     = 256
+     depends_on      = [aws_iam_role_policy_attachment.zuluchain_lambda_policy_attachment]
+}
 
 #Zip the flight search engine code
 data "archive_file" "zip_flight_search_engine" {
@@ -170,18 +217,7 @@ resource "null_resource" "flight_install_dependencies" {
     }
 }
 
-# Flight search engine Lambda function
-resource "aws_lambda_function" "terraform_lambda_func_flight" {
-    filename         = data.archive_file.zip_flight_search_engine.output_path
-    source_code_hash = data.archive_file.zip_flight_search_engine.output_base64sha256
-    function_name    = "flight_search_engine_function"
-    role            = aws_iam_role.zuluchain_lambda_role.arn
-    handler         = "flight_search_engine.lambda_handler"
-    runtime         = "python3.9"
-    timeout         = 30
-    memory_size     = 256
-     depends_on      = [aws_iam_role_policy_attachment.zuluchain_lambda_policy_attachment]
-}
+
 
 # Output the ARN of the Lambda function
 output "lambda_function_arn" {
